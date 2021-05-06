@@ -14,9 +14,11 @@ pygame.display.set_caption("Race")
 STAT_FONT = pygame.font.SysFont("comics", 50)
 
 GAP = 200
-VEL = 2
+VEL = 7
+ROTATE = 2
 MAX_ROT = 45
-MAX_BIAS = 150
+MAX_BIAS = 180
+SENSOR_ANGEL = 25
 CAR_ON_POS = False
 COMPELLED_TURN = 0   # 1 - вправо, -1 - влево, если дорога вышла за экран
 
@@ -41,7 +43,7 @@ class Car:
         self.vel_x = 0
         self.vel_y = VEL
         self.image = self.IMG
-        self.center = (self.image.get_rect().center[0] + self.x, self.image.get_rect().center[1] + self.y)
+        self.center = [self.image.get_rect().center[0] + self.x, self.image.get_rect().center[1] + self.y]
         self.distances = [0, 0]
 
     def rotate(self):
@@ -51,27 +53,19 @@ class Car:
         sin = math.sin(tilt_rad)
 
         self.image = pygame.transform.rotate(self.IMG, self.tilt)
-        self.center = (self.image.get_rect().center[0] + self.x, self.image.get_rect().center[1] + self.y)
+
 
         self.vel_x = self.vel_y * sin
         self.x += -self.vel_x   # -смешение дороги
-
-        if not CAR_ON_POS:
-            self.y += VEL
-
-        if self.y >= 700:
-            CAR_ON_POS = True
+        self.center[0] += -self.vel_x
 
     def draw(self, win):
-        # pygame.draw.line(win, (255, 0, 255), (self.x, 0), (self.x, self.y), 1)
-        # pygame.draw.line(win, (255, 0, 255), (0, self.y), (WIN_SIZE_X, self.y), 1)
-
         new_rect = self.image.get_rect(center=self.IMG.get_rect(topleft=(self.x, self.y)).center)
         win.blit(self.image, new_rect.topleft)
 
         # отрисовка линий зрения
-        drawline(new_rect.center, self.distances[1], self.tilt - 45)
-        drawline(new_rect.center, self.distances[0], self.tilt + 45)
+        drawline(new_rect.center, self.distances[0], self.tilt + SENSOR_ANGEL)
+        drawline(new_rect.center, self.distances[1], self.tilt - SENSOR_ANGEL)
 
     def get_mask(self):
         return pygame.mask.from_surface(self.IMG)
@@ -130,9 +124,6 @@ class RoadBlock:
             self.x - self.bias / 2 + self.Gap + math.cos(math.radians(self.angle)) * 50, self.y)).center).topleft
 
     def draw(self, win):
-       # pygame.draw.line(win, (255, 255, 255), (self.x, 0), (self.x, self.y), 1)
-       # pygame.draw.line(win, (255, 255, 255), (0, self.y), (WIN_SIZE_X, self.y), 1)
-
         rect_l = self.get_rect_l()
         rect_r = self.get_rect_r()
 
@@ -142,12 +133,8 @@ class RoadBlock:
         # win.blit(self.image, rect_r)
 
     def move(self):
-        if CAR_ON_POS:
-            self.y += VEL
-            self.y2 += VEL
-        else:
-            self.y += VEL*2
-            self.y2 += VEL*2
+        self.y += VEL
+        self.y2 += VEL
 
     def collide(self, car):
         Vec_1 = pygame.math.Vector2(self.x2 - self.x, self.y2 - self.y)
@@ -189,22 +176,13 @@ class BG:
         self.y2 = -self.HEIGHT
 
     def move(self):
-        if CAR_ON_POS:
-            self.y1 += VEL
-            self.y2 += VEL
-            if self.y1 > self.HEIGHT:
-                self.y1 = self.y2 - self.HEIGHT
+        self.y1 += VEL
+        self.y2 += VEL
+        if self.y1 > self.HEIGHT:
+            self.y1 = self.y2 - self.HEIGHT
 
-            if self.y2 > self.HEIGHT:
-                self.y2 = self.y1 - self.HEIGHT
-        else:
-            self.y1 += 2*VEL
-            self.y2 += 2*VEL
-            if self.y1 > self.HEIGHT:
-                self.y1 = self.y2 - self.HEIGHT
-
-            if self.y2 > self.HEIGHT:
-                self.y2 = self.y1 - self.HEIGHT
+        if self.y2 > self.HEIGHT:
+            self.y2 = self.y1 - self.HEIGHT
 
     def draw(self, win):
         win.blit(self.IMG, (0, self.y1))
@@ -300,12 +278,12 @@ def main(genomes, config):
         genome.fitness = 0
         net = neat.nn.FeedForwardNetwork.create(genome, config)
         nets.append(net)
-        cars.append(Car(WIN_SIZE_X / 2 + 25, 400))
+        cars.append(Car(WIN_SIZE_X / 2 + 25, 700))
         ge.append(genome)
 
     bg = BG()
 
-    roads = [RoadBlock(450, 400)]
+    roads = [RoadBlock(450, 800)]
     for i in range(0, 6):  # для биаса +- 100 размер 6, для +- 200 7
         New_Block = RoadBlock(roads[i].x2, roads[i].y2)
         roads.append(New_Block)
@@ -333,7 +311,7 @@ def main(genomes, config):
                 break
 
         for i, car in enumerate(cars):  # collide
-            if roads[0].collide(car) or roads[1].collide(car):
+            if roads[0].collide(car):
                 ge[i].fitness -= 1
                 cars.pop(i)
                 nets.pop(i)
@@ -342,11 +320,11 @@ def main(genomes, config):
         for i, car in enumerate(cars):
             car.rotate()
 
-            a1 = math.radians(car.tilt - 45)
-            a2 = math.radians(car.tilt + 45)
+            a1 = math.radians(car.tilt + SENSOR_ANGEL)
+            a2 = math.radians(car.tilt - SENSOR_ANGEL)
 
-            ray1 = pygame.Vector2(math.sin(a1), -math.cos(a1))  # единичный вектор
-            ray2 = pygame.Vector2(math.sin(a2), -math.cos(a2))
+            ray1 = pygame.Vector2(-math.sin(a1), -math.cos(a1))  # единичный вектор
+            ray2 = pygame.Vector2(-math.sin(a2), -math.cos(a2))
             min_d1 = math.inf
             min_d2 = math.inf
             for road in roads:
@@ -363,7 +341,7 @@ def main(genomes, config):
             ge[i].fitness += 0.1
             # distances = get_distances(car, roads[0], roads[1])
 
-            output = nets[i].activate((car.tilt/30, car.distances[0], car.distances[1]))
+            output = nets[i].activate((car.distances[0], car.distances[1]))
 
             if output[0] > 0.5:
                 ge[i].fitness += 0.1
@@ -378,9 +356,9 @@ def main(genomes, config):
                 d_pressed = False
 
             if a_pressed and -MAX_ROT <= car.tilt <= MAX_ROT:
-                car.tilt += 2
+                car.tilt += ROTATE
             elif d_pressed and -MAX_ROT <= car.tilt <= MAX_ROT:
-                car.tilt -= 2
+                car.tilt -= ROTATE
 
         rem = []
         add_road = False
@@ -409,16 +387,16 @@ def main(genomes, config):
 
         for r in rem:
             roads.remove(r)
-
+        """
         for i, car in enumerate(cars):
             if car.x - car.image.get_width() >= WIN_SIZE_X or car.x + car.image.get_width() <= 0:
                 cars.pop(i)
                 nets.pop(i)
                 ge.pop(i)
-
+        """
         bg.move()
         draw(WIN, cars, roads, bg, score, gen)
-        clock.tick(30)
+        #clock.tick(30)
 
 
 def run(config_file):
