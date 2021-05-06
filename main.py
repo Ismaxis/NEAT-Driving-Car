@@ -396,7 +396,7 @@ def main(genomes, config):
         """
         bg.move()
         draw(WIN, cars, roads, bg, score, gen)
-        clock.tick(30)
+        #clock.tick(30)
 
 
 def run(config_file):
