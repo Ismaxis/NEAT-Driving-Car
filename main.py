@@ -1,7 +1,7 @@
 import math
 import os
 import random
-
+import numpy
 import pygame
 import neat
 pygame.font.init()
@@ -14,7 +14,7 @@ pygame.display.set_caption("Race")
 STAT_FONT = pygame.font.SysFont("comics", 50)
 
 GAP = 200
-VEL = 5
+VEL = 2
 MAX_ROT = 45
 MAX_BIAS = 150
 CAR_ON_POS = False
@@ -70,19 +70,20 @@ class Car:
         win.blit(self.image, new_rect.topleft)
 
         # отрисовка линий зрения
-        drawline(new_rect.center, 400, self.tilt - 45)
-        drawline(new_rect.center, 400, self.tilt + 45)
+        drawline(new_rect.center, self.distances[1], self.tilt - 45)
+        drawline(new_rect.center, self.distances[0], self.tilt + 45)
 
     def get_mask(self):
         return pygame.mask.from_surface(self.IMG)
 
 
 def drawline(center, len, tilt):
-    tilt_rad = math.radians(tilt)
-    sin = math.sin(tilt_rad)
-    cos = math.cos(tilt_rad)
+    if len != math.inf:
+        tilt_rad = math.radians(tilt)
+        sin = math.sin(tilt_rad)
+        cos = math.cos(tilt_rad)
 
-    pygame.draw.line(WIN, (255, 255, 255), center, (center[0] - len * sin, center[1] - len * cos))
+        pygame.draw.line(WIN, (255, 255, 255), center, (center[0] - len * sin, center[1] - len * cos))
 
 
 class RoadBlock:
@@ -210,6 +211,38 @@ class BG:
         win.blit(self.IMG, (0, self.y2))
 
 
+def distance_to_segment_by_ray(ray_start, ray_dir, line):
+    Vec_1 = ray_dir
+    Vec_2 = pygame.math.Vector2(line[0][0] - ray_start[0], line[0][1] - ray_start[1])
+    Vec_3 = pygame.math.Vector2(line[1][0] - ray_start[0], line[1][1] - ray_start[1])
+
+    Cross_1 = Vec_1.cross(Vec_2)
+    Cross_2 = Vec_1.cross(Vec_3)
+
+    if numpy.sign(Cross_1) != numpy.sign(Cross_2):
+        color = (0, 255, 0)
+
+        a = line[1][1] - line[0][1]
+        b = line[0][0] - line[1][0]
+        c = -line[0][0] * line[1][1] + line[0][1] * line[1][0]
+
+        x0 = ray_start[0]
+        y0 = ray_start[1]
+        v = ray_dir[0]
+        w = ray_dir[1]
+
+        t = (-a*x0 - b*y0 - c) / (a*v +b*w)
+
+        if t > 0:
+            crossing_point = (ray_start[0] + v * t, ray_start[1] + w * t)
+            distance = numpy.sqrt((ray_start[0] - crossing_point[0])**2 + (ray_start[1] - crossing_point[1])**2)
+            return distance
+        else:
+            return math.inf
+    else:
+        return math.inf
+
+
 def draw(win, cars, roads, bg, score, gen):
     win.fill((40, 160, 80))   # обновление экрана
 
@@ -267,7 +300,7 @@ def main(genomes, config):
         genome.fitness = 0
         net = neat.nn.FeedForwardNetwork.create(genome, config)
         nets.append(net)
-        cars.append(Car(WIN_SIZE_X / 2, 300))
+        cars.append(Car(WIN_SIZE_X / 2 + 25, 400))
         ge.append(genome)
 
     bg = BG()
@@ -299,8 +332,7 @@ def main(genomes, config):
                 quit()
                 break
 
-        for i, car in enumerate(cars):  # collide   # метка 1 (строка 370)
-            car.distances = roads[0].get_distances(car)
+        for i, car in enumerate(cars):  # collide
             if roads[0].collide(car) or roads[1].collide(car):
                 ge[i].fitness -= 1
                 cars.pop(i)
@@ -309,6 +341,25 @@ def main(genomes, config):
 
         for i, car in enumerate(cars):
             car.rotate()
+
+            a1 = math.radians(car.tilt - 45)
+            a2 = math.radians(car.tilt + 45)
+
+            ray1 = pygame.Vector2(math.sin(a1), -math.cos(a1))  # единичный вектор
+            ray2 = pygame.Vector2(math.sin(a2), -math.cos(a2))
+            min_d1 = math.inf
+            min_d2 = math.inf
+            for road in roads:
+                d1 = distance_to_segment_by_ray(car.center, ray1, [[road.x, road.y], [road.x2, road.y2]])
+                d2 = distance_to_segment_by_ray(car.center, ray2, [[road.x + road.Gap, road.y],
+                                                                   [road.x2 + road.Gap, road.y2]])
+                if d1 < min_d1:
+                    min_d1 = d1
+                if d2 < min_d2:
+                    min_d2 = d2
+
+            car.distances = [min_d1, min_d2]
+
             ge[i].fitness += 0.1
             # distances = get_distances(car, roads[0], roads[1])
 
@@ -327,9 +378,9 @@ def main(genomes, config):
                 d_pressed = False
 
             if a_pressed and -MAX_ROT <= car.tilt <= MAX_ROT:
-                car.tilt += 5
+                car.tilt += 2
             elif d_pressed and -MAX_ROT <= car.tilt <= MAX_ROT:
-                car.tilt -= 5
+                car.tilt -= 2
 
         rem = []
         add_road = False
