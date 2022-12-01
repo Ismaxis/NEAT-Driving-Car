@@ -113,26 +113,26 @@ def main(genomes, config):
                     min_d2 = d2
 
             car.distances = [min_d1, min_d2]
-
-            ge[i].fitness += 0.1
-            output = nets[i].activate((car.distances[0], car.distances[1]))
-
-            if output[0] > 0.5:
+            if (i < len(cars)) :
                 ge[i].fitness += 0.1
-                a_pressed = True
-            elif output[0] < 0.5:
-                a_pressed = False
+                output = nets[i].activate((car.distances[0], car.distances[1]))
 
-            if output[1] > 0.5:
-                ge[i].fitness += 0.1
-                d_pressed = True
-            elif output[1] < 0.5:
-                d_pressed = False
+                if output[0] > 0.5:
+                    ge[i].fitness += 0.1
+                    a_pressed = True
+                elif output[0] < 0.5:
+                    a_pressed = False
 
-            if a_pressed and -RoadBlock.MAX_ROT <= car.tilt <= RoadBlock.MAX_ROT:
-                car.tilt += ROTATE
-            elif d_pressed and -RoadBlock.MAX_ROT <= car.tilt <= RoadBlock.MAX_ROT:
-                car.tilt -= ROTATE
+                if output[1] > 0.5:
+                    ge[i].fitness += 0.1
+                    d_pressed = True
+                elif output[1] < 0.5:
+                    d_pressed = False
+
+                if a_pressed and -RoadBlock.MAX_ROT <= car.tilt <= RoadBlock.MAX_ROT:
+                    car.tilt += ROTATE
+                elif d_pressed and -RoadBlock.MAX_ROT <= car.tilt <= RoadBlock.MAX_ROT:
+                    car.tilt -= ROTATE
 
         rem = []
         add_road = False
